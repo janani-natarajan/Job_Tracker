@@ -1,0 +1,6 @@
+streamlit
+pandas
+SpeechRecognition
+google-genai
+gTTS
+audio-recorder-streamlit
