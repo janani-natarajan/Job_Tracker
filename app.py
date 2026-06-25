@@ -14,6 +14,7 @@ import random
 from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
+import streamlit.components.v1 as components
 
 # ==========================================
 # 1. PAGE SETUP
@@ -123,6 +124,8 @@ if 'logged_in' not in st.session_state:
     st.session_state.contact_info = ""
     st.session_state.lock_profile = False
     st.session_state.target_identified = False
+    # Initialize premium status
+    st.session_state.user_is_premium = False 
 
 if not st.session_state.logged_in:
     col1, col2 = st.columns([1, 4])
@@ -236,6 +239,7 @@ if st.sidebar.button("🗑️ Delete Current Chat", use_container_width=True):
     st.session_state.messages = []
     st.rerun()
 
+# --- PREMIUM FEATURE: CHAT DOWNLOAD ---
 if "messages" in st.session_state and len(st.session_state.messages) > 1:
     chat_export = f"Suyog Job Finder - Chat History\nUser: {st.session_state.username}\nDate: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
     chat_export += "="*50 + "\n\n"
@@ -245,13 +249,17 @@ if "messages" in st.session_state and len(st.session_state.messages) > 1:
             chat_export += f"{role_name}:\n{msg['content']}\n\n"
             chat_export += "-"*50 + "\n\n"
             
-    st.sidebar.download_button(
-        label="📥 Download Current Chat",
-        data=chat_export,
-        file_name=f"Suyog_Chat_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
-        mime="text/plain",
-        use_container_width=True
-    )
+    # ONLY show the active download button if they are premium
+    if st.session_state.user_is_premium:
+        st.sidebar.download_button(
+            label="📥 Download Current Chat",
+            data=chat_export,
+            file_name=f"Suyog_Chat_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+    else:
+        st.sidebar.button("🔒 Download Chat (Premium)", disabled=True, use_container_width=True)
 
 st.sidebar.divider()
 
@@ -281,6 +289,44 @@ with st.sidebar.expander("⚠️ Delete Account"):
         st.session_state.lock_profile = False
         st.session_state.target_identified = False
         st.rerun()
+
+st.sidebar.divider()
+
+# --- PREMIUM FEATURE: THE POWER MODEL UPGRADE ---
+st.sidebar.subheader("💎 Premium Features")
+
+model_choice = st.sidebar.radio(
+    "AI Engine:", 
+    ["Standard (Gemini 2.5 Flash)", "Pro (Gemini 2.5 Pro - 🔒 Premium)"]
+)
+
+# Gatekeeping Logic
+requires_upgrade = False
+active_model = "gemini-2.5-flash" # Default to free model
+
+if "Pro" in model_choice:
+    if st.session_state.user_is_premium:
+        active_model = "gemini-2.5-pro"
+    else:
+        requires_upgrade = True
+
+if requires_upgrade:
+    st.sidebar.error("🔒 Upgrade your account to unlock the Pro AI Engine and Chat Downloads.")
+    
+    # Render the Android Purchase Bridge button
+    html_code = """
+    <div style="text-align: center; margin-top: 5px;">
+        <button 
+            onclick="if(typeof AndroidApp !== 'undefined') { AndroidApp.purchaseItem('suyog_premium_tier'); } else { alert('Native Android bridge not detected.'); }" 
+            style="padding: 10px 15px; font-size: 14px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%;">
+            Unlock Premium via Google Play
+        </button>
+    </div>
+    """
+    with st.sidebar:
+        components.html(html_code, height=60)
+
+st.sidebar.divider()
 
 # GEMINI API INITIALIZATION
 try:
@@ -479,8 +525,9 @@ if user_input:
                 elif msg["role"] == "assistant":
                     gemini_contents.append(types.Content(role="model", parts=[types.Part.from_text(text=msg["content"])]))
             
+            # THE API CALL NOW DYNAMICALLY SELECTS THE MODEL
             response = client.models.generate_content_stream(
-                model="gemini-2.5-flash",
+                model=active_model,
                 contents=gemini_contents,
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,
